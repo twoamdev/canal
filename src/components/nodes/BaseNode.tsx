@@ -4,6 +4,8 @@ import { Handle, Position } from '@xyflow/react';
 type NodeData = {
   label: string;
   effect: string;
+  hasSource?: boolean;
+  hasTarget?: boolean;
 }
 
 
@@ -25,16 +27,22 @@ function BaseNode({ data }: { data: NodeData }) {
       <div className='h-[0.5%] w-full '></div>
       <div className='h-[90%] w-full bg-[#222222] border-2 border-[#555555]'></div>
 
+    {data.hasSource && (
       <Handle
         type="target"
         position={Position.Top}
         className="w-[20px] h-[20px] border-2 border-[#888888] !bg-[#555555] !left-[20px]"
       />
-      <Handle
+    )}
+      
+      {data.hasTarget && (
+        <Handle
         type="source"
         position={Position.Bottom}
         className=" border-2 border-[#555555] w-[20px] h-[20px] !bg-[#313131] !left-[20px]"
       />
+      )}
+      
       
     </div>
   );

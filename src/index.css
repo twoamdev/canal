@@ -1,2 +1,49 @@
 @import "@xyflow/react/dist/base.css";
 @import "tailwindcss";
+
+/* --- 1. NODES --- */
+
+/* The cursor when hovering over a node (Default is 'grab') */
+.react-flow__node {
+  cursor: default !important;
+}
+
+/* The cursor when you are actively dragging a node (Default is 'grabbing') */
+.react-flow__node:active,
+.react-flow__node.dragging {
+  cursor: default !important;
+}
+
+
+/* --- 2. THE CANVAS (PANE) --- */
+
+/* The empty background area (Default is 'grab') */
+.react-flow__pane {
+  cursor: default !important;
+}
+
+/* The cursor when dragging/panning the canvas (Default is 'grabbing') */
+.react-flow__pane:active {
+  cursor: grabbing !important;
+}
+
+
+
+/* The actual semi-transparent blue selection box itself */
+.react-flow__selection {
+  background: rgba(182, 185, 255, 0.2) !important; /* Change color */
+  border: 1px solid rgba(182, 185, 255, 0.2) !important;
+}
+
+
+/* --- 4. HANDLES & EDGES --- */
+
+/* The connection dots */
+.react-flow__handle {
+  cursor: pointer !important; 
+}
+
+/* The lines connecting nodes */
+.react-flow__edge {
+  cursor: pointer !important;
+}
