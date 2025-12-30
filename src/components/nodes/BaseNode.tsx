@@ -1,23 +1,16 @@
 import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
-
-type NodeData = {
-  label: string;
-  effect: string;
-  hasSource?: boolean;
-  hasTarget?: boolean;
-}
+import type { BaseNodeData } from '../../types/node/baseNodeData';
 
 
-
-function BaseNode({ data }: { data: NodeData }) {
+function BaseNode({ data }: { data: BaseNodeData }) {
   return (
     <div className="shadow-md w-[480px] h-[300px] m-[10px] py-[2px]">
       <div className='h-[9.5%] w-full bg-[#313131] border-2 border-[#555555]'>
         <div className='w-full h-full flex flex-row justify-between items-center text-[#888888] text-xs px-2'>
             <div>{data.label}</div>
             <div className='flex flex-row gap-2'>
-                <div>{data.effect}</div>
+                <div className='capitalize'>{data.effect.type}</div>
                 <div>ⓘ</div>
             </div>
             
@@ -25,7 +18,9 @@ function BaseNode({ data }: { data: NodeData }) {
         
       </div>
       <div className='h-[0.5%] w-full '></div>
-      <div className='h-[90%] w-full bg-[#222222] border-2 border-[#555555]'></div>
+      <div className='h-[90%] w-full bg-[#222222] border-2 border-[#555555]'>
+          {/* Viewport for the effect preview */}
+      </div>
 
     {data.hasSource && (
       <Handle
