@@ -2,6 +2,13 @@ export const Effect = {
 NONE: "none",
 FILE: "file",
 BLUR: "blur",
+NULL: "null",
+TEXT: "text",
+MERGE: "merge",
+TRANSFORM: "transform",
+OPACITY: "opacity",
+COLOR_CORRECT: "color_correct",
+EXPORT: "export",
 
 } as const;
 
