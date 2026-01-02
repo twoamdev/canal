@@ -4,11 +4,11 @@ FILE: "file",
 BLUR: "blur",
 NULL: "null",
 TEXT: "text",
-MERGE: "merge",
 TRANSFORM: "transform",
 OPACITY: "opacity",
 COLOR_CORRECT: "color_correct",
 EXPORT: "export",
+COMPOSITION: "composition",
 
 } as const;
 

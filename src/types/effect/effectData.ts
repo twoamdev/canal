@@ -26,11 +26,6 @@ export interface TextEffectData {
   padding?: number;
 }
 
-export interface MergeEffectData {
-  type: typeof Effect.MERGE;
-  inputCount: number; // Number of input handles (minimum 2)
-}
-
 export interface TransformEffectData {
   type: typeof Effect.TRANSFORM;
   scale: number; // Scale factor (0-2 or similar, 1 = 100%)
@@ -60,4 +55,11 @@ export interface ExportEffectData {
   fileName?: string;
 }
 
-export type EffectData = FileEffectData | BlurEffectData | NullEffectData | TextEffectData | MergeEffectData | TransformEffectData | OpacityEffectData | ColorCorrectEffectData | ExportEffectData;
+export interface CompositionEffectData {
+  type: typeof Effect.COMPOSITION;
+  width: number;
+  height: number;
+  fitMode?: 'cover' | 'contain' | 'fill' | 'none'; // How to fit the image into the new dimensions
+}
+
+export type EffectData = FileEffectData | BlurEffectData | NullEffectData | TextEffectData | TransformEffectData | OpacityEffectData | ColorCorrectEffectData | ExportEffectData | CompositionEffectData;

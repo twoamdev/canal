@@ -1,4 +1,4 @@
-import { useReactFlow, type Node } from '@xyflow/react';
+import { useReactFlow, type Node, addEdge, type Connection } from '@xyflow/react';
 import { CommandPalette } from './CommandPalette';
 import { Effect } from '../enums/effect';
 import type { BaseNodeData } from '../types/node/baseNodeData';
@@ -8,9 +8,11 @@ interface CommandPaletteWrapperProps {
   onClose: () => void;
   onCreateNode: (node: Node<BaseNodeData>) => void;
   mousePosition: { x: number; y: number } | null;
+  setEdges: React.Dispatch<React.SetStateAction<any[]>>;
+  isValidConnection: (connection: any) => boolean;
 }
 
-export const CommandPaletteWrapper = ({ isOpen, onClose, onCreateNode, mousePosition }: CommandPaletteWrapperProps) => {
+export const CommandPaletteWrapper = ({ isOpen, onClose, onCreateNode, mousePosition, setEdges, isValidConnection }: CommandPaletteWrapperProps) => {
   const { screenToFlowPosition } = useReactFlow();
 
   const handleSelect = (effectOption: { type: Effect; defaultData: any; displayName: string }) => {
@@ -47,6 +49,35 @@ export const CommandPaletteWrapper = ({ isOpen, onClose, onCreateNode, mousePosi
     };
 
     onCreateNode(newNode);
+    
+    // Check if there's an active connection from ClickConnectHandler
+    // Access it via globalThis (set by ClickConnectHandler component)
+    const activeConnection = (globalThis as any).__ClickConnectHandler__?.connectionStart;
+    if (activeConnection && hasSource) {
+      // If there's an active connection and the new node has a target handle, connect them
+      // Wait a bit for the node to be added to the DOM
+      setTimeout(() => {
+        if (activeConnection.handleType === 'source') {
+          // Source -> Target connection
+          const connection: Connection = {
+            source: activeConnection.nodeId,
+            sourceHandle: activeConnection.handleId,
+            target: newNode.id,
+            targetHandle: 'target-single', // Standard target handle ID
+          };
+
+          if (isValidConnection(connection)) {
+            setEdges((eds) => addEdge(connection, eds));
+          }
+        }
+        
+        // Clear the connection state
+        if ((globalThis as any).__ClickConnectHandler__?.clearConnection) {
+          (globalThis as any).__ClickConnectHandler__.clearConnection();
+        }
+      }, 50); // Small delay to ensure node is in DOM
+    }
+    
     onClose();
   };
 

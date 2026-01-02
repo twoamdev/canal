@@ -14,17 +14,20 @@ import type { BaseNodeData } from './types/node/baseNodeData';
 import { CommandPaletteWrapper } from './components/CommandPaletteWrapper';
 import { ZoomHandler } from './components/ZoomHandler';
 import { DuplicateHandler } from './components/DuplicateHandler';
+import { EdgeCutter } from './components/EdgeCutter';
+import { FileDropHandler } from './components/FileDropHandler';
+import { ClickConnectHandler } from './components/ClickConnectHandler';
 
 // Import your panels here
 import { FilePanel } from './components/panels/FilePanel';
 import { BlurPanel } from './components/panels/BlurPanel';
 import { NullPanel } from './components/panels/NullPanel';
 import { TextPanel } from './components/panels/TextPanel';
-import { MergePanel } from './components/panels/MergePanel';
 import { TransformPanel } from './components/panels/TransformPanel';
 import { OpacityPanel } from './components/panels/OpacityPanel';
 import { ColorCorrectPanel } from './components/panels/ColorCorrectPanel';
 import { ExportPanel } from './components/panels/ExportPanel';
+import { CompositionPanel } from './components/panels/CompositionPanel';
 
 // 1. THE REGISTRY: Map Effect Types to Panel Components
 const PANEL_REGISTRY: Record<string, React.ComponentType<any>> = {
@@ -32,11 +35,11 @@ const PANEL_REGISTRY: Record<string, React.ComponentType<any>> = {
   [Effect.BLUR]: BlurPanel,
   [Effect.NULL]: NullPanel,
   [Effect.TEXT]: TextPanel,
-  [Effect.MERGE]: MergePanel,
   [Effect.TRANSFORM]: TransformPanel,
   [Effect.OPACITY]: OpacityPanel,
   [Effect.COLOR_CORRECT]: ColorCorrectPanel,
   [Effect.EXPORT]: ExportPanel,
+  [Effect.COMPOSITION]: CompositionPanel,
 };
 
 const panOnDrag : number[] = [1, 2];
@@ -59,6 +62,29 @@ export default function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
   const [isPanelVisible, setIsPanelVisible] = useState(true);
+  
+  // Track cutting mode state for disabling selection
+  const [isCuttingMode, setIsCuttingMode] = useState(false);
+  const [isCuttingDragging, setIsCuttingDragging] = useState(false);
+  
+  // Update cutting mode state from EdgeCutter component
+  useEffect(() => {
+    const checkCuttingMode = () => {
+      setIsCuttingMode((EdgeCutter as any).isCuttingMode || false);
+      setIsCuttingDragging((EdgeCutter as any).isDragging || false);
+    };
+    
+    const interval = setInterval(checkCuttingMode, 50);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Edge click handler for cutting mode
+  const handleEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    const handler = (EdgeCutter as any).getHandler?.();
+    if (handler) {
+      handler(event, edge);
+    }
+  }, []);
 
   // --- MEMOIZED HELPERS ---
 
@@ -288,14 +314,29 @@ export default function App() {
         onConnect={onConnect}
         onSelectionChange={onSelectionChange}
         isValidConnection={isValidConnection}
-        panOnScroll selectionOnDrag panOnDrag={panOnDrag}
+        onEdgeClick={handleEdgeClick}
+        edgesFocusable={true}
+        panOnScroll 
+        selectionOnDrag={!isCuttingMode && !isCuttingDragging}
+        panOnDrag={isCuttingMode && isCuttingDragging ? [] : panOnDrag}
         selectionMode={SelectionMode.Partial}
+        nodesDraggable={true}
+        nodesConnectable={false}
         proOptions={proOptions}
-        fitView
+        defaultViewport={{ x: 0, y: 0, zoom: 0.25 }}
         minZoom={0.01}
         maxZoom={4}
       >
         <Panel position="top-left" className=' text-xs text-[#ADADAD] px-2 py-[.3rem] !m-0 '>Canal</Panel>
+        
+        {/* Edge Cutter Component - must be inside ReactFlow context */}
+        <EdgeCutter setEdges={setEdges} />
+        
+        {/* File Drop Handler - must be inside ReactFlow context */}
+        <FileDropHandler setNodes={setNodes} setSelectedNodeId={setSelectedNodeId} />
+        
+        {/* Click Connect Handler - must be inside ReactFlow context */}
+        <ClickConnectHandler setEdges={setEdges} isValidConnection={isValidConnection} />
         
         {/* --- RIGHT SIDEBAR --- */}
         {isPanelVisible && (
@@ -354,6 +395,8 @@ export default function App() {
           onClose={() => setIsCommandPaletteOpen(false)}
           onCreateNode={handleCreateNode}
           mousePosition={mousePosition}
+          setEdges={setEdges}
+          isValidConnection={isValidConnection}
         />
         <ZoomHandler />
         <DuplicateHandler

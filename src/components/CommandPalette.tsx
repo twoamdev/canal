@@ -43,15 +43,6 @@ const EFFECT_OPTIONS: EffectOption[] = [
     },
   },
   {
-    type: Effect.MERGE,
-    displayName: 'Merge',
-    description: 'Merge multiple images',
-    defaultData: { 
-      type: Effect.MERGE, 
-      inputCount: 2,
-    },
-  },
-  {
     type: Effect.TRANSFORM,
     displayName: 'Transform',
     description: 'Scale, rotate, and translate image',
@@ -94,6 +85,17 @@ const EFFECT_OPTIONS: EffectOption[] = [
       format: 'png',
       quality: 0.92,
       fileName: '',
+    },
+  },
+  {
+    type: Effect.COMPOSITION,
+    displayName: 'Composition',
+    description: 'Reformat image to standard dimensions',
+    defaultData: { 
+      type: Effect.COMPOSITION, 
+      width: 1920,
+      height: 1080,
+      fitMode: 'contain',
     },
   },
 ];

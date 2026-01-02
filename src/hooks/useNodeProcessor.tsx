@@ -1,8 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
-import { useHandleConnections, useNodesData, useReactFlow, useEdges, type Edge } from '@xyflow/react';
+import { useEffect, useState } from 'react';
+import { useHandleConnections, useNodesData, useReactFlow } from '@xyflow/react';
 import { Effect } from '../enums/effect';
 import type { ImageRatio } from '../types/node/baseNodeData';
-import type { MergeEffectData } from '../types/effect/effectData';
 
 // A simple helper to process images on a hidden canvas
 // Returns both the processed image URL and the image ratio
@@ -332,105 +331,92 @@ async function renderText(
   });
 }
 
-// Helper to merge multiple images (composite layers)
-async function mergeImages(
-  imageUrls: string[],
-  ratios: (ImageRatio | null)[]
+// Helper to resize/reformat images to specific dimensions
+async function resizeImage(
+  imageUrl: string,
+  targetWidth: number,
+  targetHeight: number,
+  fitMode: 'cover' | 'contain' | 'fill' | 'none' = 'contain'
 ): Promise<{ url: string; ratio: ImageRatio }> {
   return new Promise((resolve) => {
-    if (imageUrls.length === 0) {
-      resolve({ url: '', ratio: { width: 100, height: 100 } });
-      return;
-    }
-
-    // Load all images - store them in order
-    const totalImages = imageUrls.length;
-    const images: (HTMLImageElement | null)[] = new Array(totalImages).fill(null);
-    let loadedCount = 0;
-    let errorCount = 0;
-
-    const checkComplete = () => {
-      if (loadedCount + errorCount === totalImages) {
-        if (loadedCount === 0) {
-          // All images failed
-          const baseRatio = ratios[0] || { width: 100, height: 100 };
-          resolve({ url: '', ratio: baseRatio });
-          return;
-        }
-
-        // All images loaded (or some failed), now composite them
-        // Use input 0 (background) dimensions for the canvas
-        const baseImage = images[0];
-        if (!baseImage) {
-          const baseRatio = ratios[0] || { width: 100, height: 100 };
-          resolve({ url: '', ratio: baseRatio });
-          return;
-        }
-
-        const baseRatio = ratios[0] || { width: baseImage.width, height: baseImage.height };
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        if (!ctx) {
-          resolve({ url: '', ratio: baseRatio });
-          return;
-        }
-
-        // Use the dimensions from input 0 (background) for the canvas
-        canvas.width = baseRatio.width;
-        canvas.height = baseRatio.height;
-
-        // Draw images in order (input 0 as base, then layer others on top at their original size)
-        images.forEach((img, index) => {
-          if (img) {
-            if (index === 0) {
-              // Base layer - draw at canvas size
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            } else {
-              // Overlay layers - draw at their original size (no stretching)
-              ctx.drawImage(img, 0, 0);
-            }
-          }
-        });
-
-        canvas.toBlob((blob) => {
-          if (blob) {
-            resolve({
-              url: URL.createObjectURL(blob),
-              ratio: baseRatio,
-            });
-          } else {
-            resolve({ url: '', ratio: baseRatio });
-          }
-        });
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = imageUrl;
+    
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve({ url: '', ratio: { width: targetWidth, height: targetHeight } });
+        return;
       }
+
+      // Set canvas to target dimensions
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+
+      // Clear canvas (transparent background)
+      ctx.clearRect(0, 0, targetWidth, targetHeight);
+
+      let drawWidth: number;
+      let drawHeight: number;
+      let drawX: number;
+      let drawY: number;
+
+      if (fitMode === 'fill') {
+        // Stretch to fill (may distort)
+        drawWidth = targetWidth;
+        drawHeight = targetHeight;
+        drawX = 0;
+        drawY = 0;
+      } else if (fitMode === 'none') {
+        // Use original size (may crop)
+        drawWidth = img.width;
+        drawHeight = img.height;
+        drawX = 0;
+        drawY = 0;
+      } else {
+        // Calculate scaling for contain or cover
+        const scaleX = targetWidth / img.width;
+        const scaleY = targetHeight / img.height;
+        const scale = fitMode === 'cover' 
+          ? Math.max(scaleX, scaleY)  // Cover: scale up to fill, may crop
+          : Math.min(scaleX, scaleY); // Contain: scale down to fit, may letterbox
+
+        drawWidth = img.width * scale;
+        drawHeight = img.height * scale;
+        drawX = (targetWidth - drawWidth) / 2;
+        drawY = (targetHeight - drawHeight) / 2;
+      }
+
+      // Draw the image
+      ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+
+      // Export as blob
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve({
+            url: URL.createObjectURL(blob),
+            ratio: {
+              width: targetWidth,
+              height: targetHeight,
+            },
+          });
+        } else {
+          resolve({ url: '', ratio: { width: targetWidth, height: targetHeight } });
+        }
+      });
     };
 
-    imageUrls.forEach((url, index) => {
-      const img = new Image();
-      img.crossOrigin = "Anonymous";
-      img.src = url;
-      
-      img.onload = () => {
-        images[index] = img;
-        loadedCount++;
-        checkComplete();
-      };
-
-      img.onerror = () => {
-        errorCount++;
-        checkComplete();
-      };
-    });
+    img.onerror = () => {
+      resolve({ url: '', ratio: { width: targetWidth, height: targetHeight } });
+    };
   });
 }
 
 export const useNodeProcessor = (id: string, data: any) => {
-  const { updateNodeData, getEdges, getNodes } = useReactFlow();
+  const { updateNodeData } = useReactFlow();
   const [processedImage, setProcessedImage] = useState<string | null>(null);
-  
-  // Get edges reactively - this will trigger re-renders when edges change
-  const edges = useEdges();
 
   // 1. Find who is connected to our input handle (Position.Top)
   const connections = useHandleConnections({ type: 'target' });
@@ -439,51 +425,6 @@ export const useNodeProcessor = (id: string, data: any) => {
   // We use the first connection (assuming single input for now)
   const nodeData = useNodesData(connections?.[0]?.source);
 
-  // 3. For merge nodes, get source node IDs from edges for reactivity tracking
-  // Use the reactive edges array instead of getEdges() function
-  const mergeSourceNodeIds = useMemo(() => {
-    if (data.effect.type !== Effect.MERGE) return [];
-    
-    const nodeEdges = edges.filter((edge: Edge) => edge.target === id);
-    
-    // Sort edges by handle ID to maintain order
-    nodeEdges.sort((a: Edge, b: Edge) => {
-      const aHandle = a.targetHandle || '';
-      const bHandle = b.targetHandle || '';
-      const aNum = parseInt(aHandle.replace('input-', '')) || 0;
-      const bNum = parseInt(bHandle.replace('input-', '')) || 0;
-      return aNum - bNum;
-    });
-    
-    // Get source node IDs in order
-    return nodeEdges.map((edge: Edge) => edge.source).filter(Boolean);
-  }, [id, data.effect.type, edges]);
-  
-  // Use useNodesData for each source node to track changes (React will track these)
-  // For merge nodes, we'll track the first few source nodes (up to reasonable limit)
-  // Always call hooks (React rules), but pass empty string if no node ID (useNodesData handles this)
-  const mergeSourceNode0 = useNodesData(mergeSourceNodeIds[0] || '');
-  const mergeSourceNode1 = useNodesData(mergeSourceNodeIds[1] || '');
-  const mergeSourceNode2 = useNodesData(mergeSourceNodeIds[2] || '');
-  const mergeSourceNode3 = useNodesData(mergeSourceNodeIds[3] || '');
-  
-  // Create dependency string from tracked source nodes
-  const mergeSourceOutputs = useMemo(() => {
-    if (data.effect.type !== Effect.MERGE) return null;
-    const nodes = [mergeSourceNode0, mergeSourceNode1, mergeSourceNode2, mergeSourceNode3].filter(Boolean);
-    return nodes.map(node => node?.data?.output || '').join(',');
-  }, [data.effect.type, mergeSourceNode0?.data?.output, mergeSourceNode1?.data?.output, mergeSourceNode2?.data?.output, mergeSourceNode3?.data?.output]);
-  
-  const mergeSourceRatios = useMemo(() => {
-    if (data.effect.type !== Effect.MERGE) return null;
-    const nodes = [mergeSourceNode0, mergeSourceNode1, mergeSourceNode2, mergeSourceNode3].filter(Boolean);
-    return nodes.map(node => {
-      const ratio = node?.data?.ratio;
-      return ratio && typeof ratio === 'object' && 'width' in ratio && 'height' in ratio
-        ? JSON.stringify(ratio)
-        : '';
-    }).join(',');
-  }, [data.effect.type, mergeSourceNode0?.data?.ratio, mergeSourceNode1?.data?.ratio, mergeSourceNode2?.data?.ratio, mergeSourceNode3?.data?.ratio]);
 
   useEffect(() => {
     const runPipeline = async () => {
@@ -491,11 +432,15 @@ export const useNodeProcessor = (id: string, data: any) => {
       let resultRatio: ImageRatio | null = null;
 
       // CASE A: We are a Source Node (File)
+      // FILE nodes always output their previewUrl, regardless of connections
       if (data.effect.type === Effect.FILE) {
-        resultUrl = data.effect.previewUrl;
+        const fileEffect = data.effect as { type: typeof Effect.FILE; fileName: string; previewUrl?: string };
+        resultUrl = fileEffect.previewUrl || null;
         // Calculate ratio from the image if we have a preview URL
         if (resultUrl) {
           resultRatio = await getImageRatio(resultUrl);
+        } else {
+          resultRatio = null;
         }
       }
       
@@ -520,98 +465,7 @@ export const useNodeProcessor = (id: string, data: any) => {
         }
       }
       
-      // CASE C: We are a Merge Node - composite multiple inputs
-      else if (data.effect.type === Effect.MERGE) {
-        const mergeData = data.effect as MergeEffectData;
-        const inputCount = mergeData.inputCount || 2;
-        
-        // Get all edges connected to this node
-        const allEdges = getEdges();
-        const nodeEdges = allEdges.filter(edge => edge.target === id);
-        
-        // Sort edges by handle ID (input-0, input-1, etc.) to get them in order
-        nodeEdges.sort((a, b) => {
-          const aHandle = a.targetHandle || '';
-          const bHandle = b.targetHandle || '';
-          const aNum = parseInt(aHandle.replace('input-', '')) || 0;
-          const bNum = parseInt(bHandle.replace('input-', '')) || 0;
-          return aNum - bNum;
-        });
-        
-        // If only input-0 is connected, act as a pass-through (like NULL node)
-        const onlyFirstInput = nodeEdges.length === 1 && nodeEdges[0]?.targetHandle === 'input-0';
-        
-        if (onlyFirstInput) {
-          // Pass-through behavior - just copy input-0 to output
-          const edge = nodeEdges[0];
-          const allNodes = getNodes();
-          const sourceNode = allNodes.find(n => n.id === edge.source);
-          
-          if (sourceNode && sourceNode.data?.output) {
-            resultUrl = sourceNode.data.output as string;
-            const nodeRatio = sourceNode.data.ratio;
-            if (nodeRatio && typeof nodeRatio === 'object' && 'width' in nodeRatio && 'height' in nodeRatio) {
-              resultRatio = nodeRatio as ImageRatio;
-            } else {
-              resultRatio = null;
-            }
-          } else {
-            resultUrl = null;
-            resultRatio = null;
-          }
-        } else {
-          // Multiple inputs - perform merge
-          // Use tracked source nodes when available (first 4), fall back to getNodes() for others
-          const trackedSourceNodes = [mergeSourceNode0, mergeSourceNode1, mergeSourceNode2, mergeSourceNode3];
-          const allNodes = getNodes();
-          
-          // Get images and ratios from each input
-          const imageUrls: string[] = [];
-          const ratios: (ImageRatio | null)[] = [];
-          
-          for (let i = 0; i < inputCount; i++) {
-            const edge = nodeEdges.find(e => e.targetHandle === `input-${i}`);
-            if (edge) {
-              // Use tracked node if available and valid (first 4), otherwise get from allNodes
-              let sourceNode: any = null;
-              if (i < 4 && trackedSourceNodes[i] && trackedSourceNodes[i]?.data) {
-                sourceNode = trackedSourceNodes[i];
-              } else {
-                sourceNode = allNodes.find(n => n.id === edge.source);
-              }
-              
-              if (sourceNode && sourceNode.data?.output) {
-                imageUrls.push(sourceNode.data.output as string);
-                const nodeRatio = sourceNode.data.ratio;
-                if (nodeRatio && typeof nodeRatio === 'object' && 'width' in nodeRatio && 'height' in nodeRatio) {
-                  ratios.push(nodeRatio as ImageRatio);
-                } else {
-                  ratios.push(null);
-                }
-              } else {
-                // Missing input - can't merge
-                resultUrl = null;
-                resultRatio = null;
-                break;
-              }
-            } else {
-              // Missing input - can't merge
-              resultUrl = null;
-              resultRatio = null;
-              break;
-            }
-          }
-          
-          // If we have all inputs, merge them
-          if (imageUrls.length === inputCount && imageUrls.length > 0) {
-            const result = await mergeImages(imageUrls, ratios);
-            resultUrl = result.url;
-            resultRatio = result.ratio; // Use ratio from input 0
-          }
-        }
-      }
-      
-      // CASE D: We are a Null Node - just copy input to output
+      // CASE C: We are a Null Node - just copy input to output
       else if (data.effect.type === Effect.NULL) {
         // Check if we have a valid connection and input
         if (connections && connections.length > 0 && nodeData && nodeData.data?.output) {
@@ -646,6 +500,30 @@ export const useNodeProcessor = (id: string, data: any) => {
         }
       }
       
+      // CASE I: We are a Composition Node - resize/reformat to target dimensions
+      else if (data.effect.type === Effect.COMPOSITION) {
+        // Check if we have a valid connection and input
+        if (connections && connections.length > 0 && nodeData && nodeData.data?.output) {
+          const compositionData = data.effect;
+          const targetWidth = compositionData.width || 1920;
+          const targetHeight = compositionData.height || 1080;
+          const fitMode = compositionData.fitMode || 'contain';
+          
+          const result = await resizeImage(
+            nodeData.data.output as string,
+            targetWidth,
+            targetHeight,
+            fitMode
+          );
+          resultUrl = result.url;
+          resultRatio = result.ratio;
+        } else {
+          // No input - clear output
+          resultUrl = null;
+          resultRatio = null;
+        }
+      }
+      
       // CASE E: We are an Effect Node (Blur, etc.)
       // We need a parent input to work - check if we have a valid connection
       else if (connections && connections.length > 0 && nodeData && nodeData.data?.output) {
@@ -663,21 +541,24 @@ export const useNodeProcessor = (id: string, data: any) => {
           : result.ratio;
       }
       // CASE F: We are disconnected - clear the output
-      else if (data.effect.type !== Effect.FILE && data.effect.type !== Effect.TEXT && data.effect.type !== Effect.MERGE && data.effect.type !== Effect.EXPORT && (!connections || connections.length === 0)) {
+      else if (data.effect.type !== Effect.FILE && data.effect.type !== Effect.TEXT && data.effect.type !== Effect.EXPORT && data.effect.type !== Effect.COMPOSITION && (!connections || connections.length === 0)) {
         resultUrl = null;
         resultRatio = null;
       }
 
       // 3. Update State & Propagate
       // Update if the result changed (including clearing to null)
+      // For FILE nodes, always ensure output is set even if it hasn't "changed"
+      const isFileNode = data.effect.type === Effect.FILE;
       const outputChanged = resultUrl !== data.output;
       const ratioChanged = JSON.stringify(resultRatio) !== JSON.stringify(data.ratio);
       
-      if (outputChanged || ratioChanged) {
+      // For FILE nodes, always update to ensure output is set (handles reconnection case)
+      // For other nodes, only update if changed
+      if (isFileNode || outputChanged || ratioChanged) {
         setProcessedImage(resultUrl);
         
         // This is crucial: We write to 'data.output' and 'data.ratio' so the NEXT node can read it
-        // Clear output and ratio when disconnected
         updateNodeData(id, { 
           output: resultUrl || undefined,
           ratio: resultRatio || undefined,
@@ -693,8 +574,6 @@ export const useNodeProcessor = (id: string, data: any) => {
     nodeData?.data?.output, // Upstream node changed (new image loaded) - for single input nodes
     nodeData?.data?.ratio,  // Upstream node ratio changed - for single input nodes
     connections,      // Connections changed (node connected/disconnected)
-    mergeSourceOutputs, // For merge nodes - track all source outputs for reactivity
-    mergeSourceRatios,  // For merge nodes - track all source ratios for reactivity
   ]);
 
   return processedImage;
